@@ -1,22 +1,24 @@
-import type * as RDF from '../types/data_model.ts';
+import type * as DataModel from '../types/data_model.ts';
 
 /**
  * An instance of DefaultGraph represents the default graph.
  * It's only allowed to assign a DefaultGraph to the .graph property of a Quad.
  */
-export class Quad implements RDF.BaseQuad {
-  public readonly termType = 'Quad';
-  public readonly value = '';
-  public readonly subject: RDF.Term;
-  public readonly predicate: RDF.Term;
-  public readonly object: RDF.Term;
-  public readonly graph: RDF.Term;
+export class Quad implements DataModel.BaseQuad {
+  public static readonly termType = 'Quad';
+  public static readonly value = '';
+  public readonly termType = Quad.termType;
+  public readonly value = Quad.value;
+  public readonly subject: DataModel.Term;
+  public readonly predicate: DataModel.Term;
+  public readonly object: DataModel.Term;
+  public readonly graph: DataModel.Term;
 
   public constructor(
-    subject: RDF.Term,
-    predicate: RDF.Term,
-    object: RDF.Term,
-    graph: RDF.Term,
+    subject: DataModel.Term,
+    predicate: DataModel.Term,
+    object: DataModel.Term,
+    graph: DataModel.Term,
   ) {
     this.subject = subject;
     this.predicate = predicate;
@@ -24,9 +26,9 @@ export class Quad implements RDF.BaseQuad {
     this.graph = graph;
   }
 
-  public equals(other?: RDF.Term | null): boolean {
+  public equals(other?: DataModel.Term | null): boolean {
     // `|| !other.termType` is for backwards-compatibility with old factories without RDF* support.
-    return !!other && (other.termType === 'Quad' || !other.termType) &&
+    return !!other && (other.termType === Quad.termType || !other.termType) &&
       this.subject.equals(other.subject) &&
       this.predicate.equals(other.predicate) &&
       this.object.equals(other.object) &&

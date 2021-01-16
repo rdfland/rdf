@@ -1,17 +1,18 @@
-import type * as RDF from '../types/data_model.ts';
+import type * as DataModel from '../types/data_model.ts';
 import { BlankNode } from './blank_node.ts';
 import { DefaultGraph } from './default_graph.ts';
 import { Literal } from './literal.ts';
 import { NamedNode } from './named_node.ts';
 import { Quad } from './quad.ts';
 import { Variable } from './variable.ts';
+import { XSD } from "../ns/xsd.ts";
 
 let dataFactoryCounter = 0;
 
 /**
  * A factory for instantiating RDF terms and quads.
  */
-export class DataFactory<Q extends RDF.BaseQuad = RDF.Quad> implements RDF.DataFactory<Q> {
+export class DataFactory<Q extends DataModel.BaseQuad = DataModel.Quad> implements DataModel.DataFactory<Q> {
   private readonly blankNodePrefix: string;
   private blankNodeCounter = 0;
 
@@ -50,7 +51,7 @@ export class DataFactory<Q extends RDF.BaseQuad = RDF.Quad> implements RDF.DataF
    * @return A new instance of Literal.
    * @see Literal
    */
-  public literal(value: string, languageOrDatatype?: string | RDF.NamedNode): Literal {
+  public literal(value: string, languageOrDatatype?: string | DataModel.NamedNode): Literal {
     return new Literal(value, languageOrDatatype);
   }
 
@@ -93,12 +94,12 @@ export class DataFactory<Q extends RDF.BaseQuad = RDF.Quad> implements RDF.DataF
    * @param original An RDF term.
    * @return A deep copy of the given term.
    */
-  public fromTerm<T extends RDF.Term>(original: T):
-  (T extends RDF.NamedNode ? NamedNode
-    : (T extends RDF.BlankNode ? BlankNode
-      : (T extends RDF.Literal ? Literal
-        : (T extends RDF.Variable ? Variable
-          : (T extends RDF.DefaultGraph ? DefaultGraph
+  public fromTerm<T extends DataModel.Term>(original: T):
+  (T extends DataModel.NamedNode ? NamedNode
+    : (T extends DataModel.BlankNode ? BlankNode
+      : (T extends DataModel.Literal ? Literal
+        : (T extends DataModel.Variable ? Variable
+          : (T extends DataModel.DefaultGraph ? DefaultGraph
             : (T extends Q ? Q : unknown)))))) {
     // TODO: remove nasty any casts when this TS bug has been fixed:
     //  https://github.com/microsoft/TypeScript/issues/26933
@@ -108,11 +109,11 @@ export class DataFactory<Q extends RDF.BaseQuad = RDF.Quad> implements RDF.DataF
       case 'BlankNode':
         return <any> this.blankNode(original.value);
       case 'Literal':
-        if ((<RDF.Literal> original).language) {
-          return <any> this.literal(original.value, (<RDF.Literal>original).language);
+        if ((<DataModel.Literal> original).language) {
+          return <any> this.literal(original.value, (<DataModel.Literal>original).language);
         }
-        if (!(<RDF.Literal> original).datatype.equals(Literal.XSD_STRING)) {
-          return <any> this.literal(original.value, this.fromTerm((<RDF.Literal> original).datatype));
+        if (!(<DataModel.Literal> original).datatype.equals(new NamedNode(XSD.string))) {
+          return <any> this.literal(original.value, this.fromTerm((<DataModel.Literal> original).datatype));
         }
         return <any> this.literal(original.value);
       case 'Variable':
