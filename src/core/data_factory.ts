@@ -8,6 +8,11 @@ import { Variable } from './variable.ts';
 import { XSD } from "../ns/xsd.ts";
 
 let dataFactoryCounter = 0;
+const defaultGraph = new DefaultGraph();
+
+export interface DataFactoryOptions {
+  blankNodePrefix?: string;
+}
 
 /**
  * A factory for instantiating RDF terms and quads.
@@ -16,7 +21,7 @@ export class DataFactory<Q extends DataModel.BaseQuad = DataModel.Quad> implemen
   private readonly blankNodePrefix: string;
   private blankNodeCounter = 0;
 
-  public constructor(options?: IDataFactoryOptions) {
+  public constructor(options?: DataFactoryOptions) {
     options = options || {};
     this.blankNodePrefix = options.blankNodePrefix || `df_${dataFactoryCounter++}_`;
   }
@@ -26,9 +31,10 @@ export class DataFactory<Q extends DataModel.BaseQuad = DataModel.Quad> implemen
    * @return A new instance of NamedNode.
    * @see NamedNode
    */
-  public namedNode<Iri extends string = string>(value: Iri): NamedNode<Iri> {
+  public static namedNode<Iri extends string = string>(value: Iri): NamedNode<Iri> {
     return new NamedNode(value);
   }
+  public namedNode = DataFactory.namedNode;
 
   /**
    * @param value The optional blank node identifier.
@@ -51,9 +57,10 @@ export class DataFactory<Q extends DataModel.BaseQuad = DataModel.Quad> implemen
    * @return A new instance of Literal.
    * @see Literal
    */
-  public literal(value: string, languageOrDatatype?: string | DataModel.NamedNode): Literal {
+  public static literal(value: string, languageOrDatatype?: string | DataModel.NamedNode): Literal {
     return new Literal(value, languageOrDatatype);
   }
+  public literal = DataFactory.literal;
 
   /**
    * This method is optional.
@@ -61,16 +68,18 @@ export class DataFactory<Q extends DataModel.BaseQuad = DataModel.Quad> implemen
    * @return A new instance of Variable.
    * @see Variable
    */
-  public variable(value: string): Variable {
+  public static variable(value: string): Variable {
     return new Variable(value);
   }
+  public variable = DataFactory.variable;
 
   /**
    * @return An instance of DefaultGraph.
    */
-  public defaultGraph(): DefaultGraph {
-    return DefaultGraph.INSTANCE;
+  public static defaultGraph(): DefaultGraph {
+    return defaultGraph;
   }
+  public defaultGraph = DataFactory.defaultGraph;
 
   /**
    * @param subject   The quad subject term.
@@ -86,7 +95,15 @@ export class DataFactory<Q extends DataModel.BaseQuad = DataModel.Quad> implemen
     object: Q['object'],
     graph?: Q['graph'],
   ): Q & Quad {
-    return <Q> new Quad(subject, predicate, object, graph || this.defaultGraph());
+    return <Q> new Quad(subject, predicate, object, graph || DataFactory.defaultGraph());
+  }
+  public static quad(
+    subject: DataModel.Quad_Subject,
+    predicate: DataModel.Quad_Predicate,
+    object: DataModel.Quad_Object,
+    graph?: DataModel.Quad_Graph,
+  ): Quad {
+    return new Quad(subject, predicate, object, graph || DataFactory.defaultGraph());
   }
 
   /**
@@ -145,8 +162,4 @@ export class DataFactory<Q extends DataModel.BaseQuad = DataModel.Quad> implemen
   public resetBlankNodeCounter(): void {
     this.blankNodeCounter = 0;
   }
-}
-
-export interface IDataFactoryOptions {
-  blankNodePrefix?: string;
 }
