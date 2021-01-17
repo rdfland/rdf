@@ -32,7 +32,7 @@ const lineModeRegExps = {
 const invalidRegExp = /$0^/;
 
 // ## Constructor
-export default class N3Lexer {
+export class Lexer {
   constructor(options) {
     // ## Regular expressions
     // It's slightly faster to have these as properties than as in-scope variables

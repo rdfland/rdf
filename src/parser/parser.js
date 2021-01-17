@@ -1,5 +1,5 @@
 // **N3Parser** parses N3 documents.
-import N3Lexer from './lexer.js';
+import { Lexer } from './lexer.js';
 import { DataFactory } from '../core/data_factory.ts';
 import { RDF } from '../ns/rdf.ts';
 import { OWL } from '../ns/owl.ts';
@@ -35,7 +35,7 @@ export class Parser {
       this._resolveRelativeIRI = iri => { return null; };
     this._blankNodePrefix = typeof options.blankNodePrefix !== 'string' ? '' :
                               options.blankNodePrefix.replace(/^(?!_:)/, '_:');
-    this._lexer = options.lexer || new N3Lexer({ lineMode: isLineMode, n3: isN3 });
+    this._lexer = options.lexer || new Lexer({ lineMode: isLineMode, n3: isN3 });
     // Disable explicit quantifiers by default
     this._explicitQuantifiers = !!options.explicitQuantifiers;
   }
