@@ -1,13 +1,16 @@
-// **N3Parser** parses N3 documents.
 import { Lexer } from './lexer.js';
 import { DataFactory } from '../core/data_factory.ts';
 import { RDF } from '../ns/rdf.ts';
 import { OWL } from '../ns/owl.ts';
 
-let blankNodePrefix = 0;
-
-// ## Constructor
 export class Parser {
+  dataFactory = new DataFactory();
+  ABBREVIATIONS = {
+    'a': DataFactory.namedNode(RDF.type),
+    '=': DataFactory.namedNode(OWL.sameAs),
+    '>': DataFactory.namedNode('http://www.w3.org/2000/10/swap/log#implies'),
+  };
+
   constructor(options) {
     this._contextStack = [];
     this._graph = null;
@@ -15,7 +18,6 @@ export class Parser {
     // Set the document IRI
     options = options || {};
     this._setBase(options.baseIRI);
-    options.factory && initDataFactory(this, options.factory);
 
     // Set supported features depending on the format
     const format = (typeof options.format === 'string') ?
@@ -33,18 +35,9 @@ export class Parser {
     // Disable relative IRIs in N-Triples or N-Quads mode
     if (isLineMode)
       this._resolveRelativeIRI = iri => { return null; };
-    this._blankNodePrefix = typeof options.blankNodePrefix !== 'string' ? '' :
-                              options.blankNodePrefix.replace(/^(?!_:)/, '_:');
     this._lexer = options.lexer || new Lexer({ lineMode: isLineMode, n3: isN3 });
     // Disable explicit quantifiers by default
     this._explicitQuantifiers = !!options.explicitQuantifiers;
-  }
-
-  // ## Static class methods
-
-  // ### `_resetBlankNodePrefix` restarts blank node prefix identification
-  static _resetBlankNodePrefix() {
-    blankNodePrefix = 0;
   }
 
   // ## Private methods
@@ -154,7 +147,7 @@ export class Parser {
       const iri = this._resolveIRI(token.value);
       if (iri === null)
         return this._error('Invalid IRI', token);
-      value = this._namedNode(iri);
+      value = DataFactory.namedNode(iri);
       break;
     // Read a prefixed name
     case 'type':
@@ -162,15 +155,15 @@ export class Parser {
       const prefix = this._prefixes[token.prefix];
       if (prefix === undefined)
         return this._error(`Undefined prefix "${token.prefix}:"`, token);
-      value = this._namedNode(prefix + token.value);
+      value = DataFactory.namedNode(prefix + token.value);
       break;
     // Read a blank node
     case 'blank':
-      value = this._blankNode(this._prefixes[token.prefix] + token.value);
+      value = this.dataFactory.blankNode(this._prefixes[token.prefix] + token.value);
       break;
     // Read a variable
     case 'var':
-      value = this._variable(token.value.substr(1));
+      value = DataFactory.variable(token.value.substr(1));
       break;
     // Everything else is not an entity
     default:
@@ -189,11 +182,11 @@ export class Parser {
     case '[':
       // Start a new quad with a new blank node as subject
       this._saveContext('blank', this._graph,
-                        this._subject = this._blankNode(), null, null);
+                        this._subject = this.dataFactory.blankNode(), null, null);
       return this._readBlankNodeHead;
     case '(':
       // Start a new list
-      this._saveContext('list', this._graph, this.RDF_NIL, null, null);
+      this._saveContext('list', this._graph, DataFactory.namedNode(RDF.nil), null, null);
       this._subject = null;
       return this._readListItem;
     case '{':
@@ -201,7 +194,7 @@ export class Parser {
       if (!this._n3Mode)
         return this._error('Unexpected graph', token);
       this._saveContext('formula', this._graph,
-                        this._graph = this._blankNode(), null, null);
+                        this._graph = this.dataFactory.blankNode(), null, null);
       return this._readSubject;
     case '}':
        // No subject; the graph in which we are reading is closed instead
@@ -210,15 +203,15 @@ export class Parser {
       if (!this._n3Mode)
         return this._error('Unexpected "@forSome"', token);
       this._subject = null;
-      this._predicate = this.N3_FORSOME;
-      this._quantifier = this._blankNode;
+      this._predicate = DataFactory.namedNode('http://www.w3.org/2000/10/swap/reify#forSome');
+      this._quantifier = this.dataFactory.blankNode;
       return this._readQuantifierList;
     case '@forAll':
       if (!this._n3Mode)
         return this._error('Unexpected "@forAll"', token);
       this._subject = null;
-      this._predicate = this.N3_FORALL;
-      this._quantifier = this._variable;
+      this._predicate = DataFactory.namedNode('http://www.w3.org/2000/10/swap/reify#forAll');
+      this._quantifier = DataFactory.variable;
       return this._readQuantifierList;
     case 'literal':
       if (!this._n3Mode)
@@ -229,7 +222,7 @@ export class Parser {
         return this._completeSubjectLiteral;
       }
       else
-        this._subject = this._literal(token.value, this._namedNode(token.prefix));
+        this._subject = DataFactory.literal(token.value, DataFactory.namedNode(token.prefix));
 
       break;
     case '<<':
@@ -295,16 +288,16 @@ export class Parser {
       }
       // Pre-datatyped string literal (prefix stores the datatype)
       else
-        this._object = this._literal(token.value, this._namedNode(token.prefix));
+        this._object = DataFactory.literal(token.value, DataFactory.namedNode(token.prefix));
       break;
     case '[':
       // Start a new quad with a new blank node as subject
       this._saveContext('blank', this._graph, this._subject, this._predicate,
-                        this._subject = this._blankNode());
+                        this._subject = this.dataFactory.blankNode());
       return this._readBlankNodeHead;
     case '(':
       // Start a new list
-      this._saveContext('list', this._graph, this._subject, this._predicate, this.RDF_NIL);
+      this._saveContext('list', this._graph, this._subject, this._predicate, DataFactory.namedNode(RDF.nil));
       this._subject = null;
       return this._readListItem;
     case '{':
@@ -312,7 +305,7 @@ export class Parser {
       if (!this._n3Mode)
         return this._error('Unexpected graph', token);
       this._saveContext('formula', this._graph, this._subject, this._predicate,
-                        this._graph = this._blankNode());
+                        this._graph = this.dataFactory.blankNode());
       return this._readSubject;
     case '<<':
       if (!this._supportsRDFStar)
@@ -404,14 +397,14 @@ export class Parser {
     case '[':
       // Stack the current list quad and start a new quad with a blank node as subject
       this._saveContext('blank', this._graph,
-                        list = this._blankNode(), this.RDF_FIRST,
-                        this._subject = item = this._blankNode());
+                        list = this.dataFactory.blankNode(), DataFactory.namedNode(RDF.first),
+                        this._subject = item = this.dataFactory.blankNode());
       next = this._readBlankNodeHead;
       break;
     case '(':
       // Stack the current list quad and start a new list
       this._saveContext('list', this._graph,
-                        list = this._blankNode(), this.RDF_FIRST, this.RDF_NIL);
+                        list = this.dataFactory.blankNode(), DataFactory.namedNode(RDF.first), DataFactory.namedNode(RDF.nil));
       this._subject = null;
       break;
     case ')':
@@ -426,18 +419,18 @@ export class Parser {
         // The next token is the predicate
         next = this._readPredicate;
         // No list tail if this was an empty list
-        if (this._subject === this.RDF_NIL)
+        if (this._subject === DataFactory.namedNode(RDF.nil))
           return next;
       }
       // The list was in the parent context's object
       else {
         next = this._getContextEndReader();
         // No list tail if this was an empty list
-        if (this._object === this.RDF_NIL)
+        if (this._object === DataFactory.namedNode(RDF.nil))
           return next;
       }
       // Close the list by making the head nil
-      list = this.RDF_NIL;
+      list = DataFactory.namedNode(RDF.nil);
       break;
     case 'literal':
       // Regular literal, can still get a datatype or language
@@ -447,7 +440,7 @@ export class Parser {
       }
       // Pre-datatyped string literal (prefix stores the datatype)
       else {
-        item = this._literal(token.value, this._namedNode(token.prefix));
+        item = DataFactory.literal(token.value, DataFactory.namedNode(token.prefix));
         next = this._getContextEndReader();
       }
       break;
@@ -456,7 +449,7 @@ export class Parser {
       if (!this._n3Mode)
         return this._error('Unexpected graph', token);
       this._saveContext('formula', this._graph, this._subject, this._predicate,
-                        this._graph = this._blankNode());
+                        this._graph = this.dataFactory.blankNode());
       return this._readSubject;
     default:
       if ((item = this._readEntity(token)) === undefined)
@@ -465,7 +458,7 @@ export class Parser {
 
      // Create a new blank node if no item head was assigned yet
     if (list === null)
-      this._subject = list = this._blankNode();
+      this._subject = list = this.dataFactory.blankNode();
 
     // Is this the first element of the list?
     if (previousList === null) {
@@ -477,20 +470,20 @@ export class Parser {
     }
     else {
       // Continue the previous list with the current list
-      this._emit(previousList, this.RDF_REST, list, this._graph);
+      this._emit(previousList, DataFactory.namedNode(RDF.rest), list, this._graph);
     }
     // If an item was read, add it to the list
     if (item !== null) {
       // In N3 mode, the item might be a path
       if (this._n3Mode && (token.type === 'IRI' || token.type === 'prefixed')) {
         // Create a new context to add the item's path
-        this._saveContext('item', this._graph, list, this.RDF_FIRST, item);
+        this._saveContext('item', this._graph, list, DataFactory.namedNode(RDF.first), item);
         this._subject = item, this._predicate = null;
         // _readPath will restore the context and output the item
         return this._getPathReader(this._readListItem);
       }
       // Output the item
-      this._emit(list, this.RDF_FIRST, item, this._graph);
+      this._emit(list, DataFactory.namedNode(RDF.first), item, this._graph);
     }
     return next;
   }
@@ -509,7 +502,7 @@ export class Parser {
   // ### `_completeLiteral` completes a literal with an optional datatype or language
   _completeLiteral(token) {
     // Create a simple string literal by default
-    let literal = this._literal(this._literalValue);
+    let literal = DataFactory.literal(this._literalValue);
 
     switch (token.type) {
     // Create a datatyped literal
@@ -517,12 +510,12 @@ export class Parser {
     case 'typeIRI':
       const datatype = this._readEntity(token);
       if (datatype === undefined) return; // No datatype means an error occurred
-      literal = this._literal(this._literalValue, datatype);
+      literal = DataFactory.literal(this._literalValue, datatype);
       token = null;
       break;
     // Create a language-tagged string
     case 'langcode':
-      literal = this._literal(this._literalValue, token.value);
+      literal = DataFactory.literal(this._literalValue, token.value);
       token = null;
       break;
     }
@@ -546,7 +539,7 @@ export class Parser {
     // If this literal was part of a list, write the item
     // (we could also check the context stack, but passing in a flag is faster)
     if (listItem)
-      this._emit(this._subject, this.RDF_FIRST, this._object, this._graph);
+      this._emit(this._subject, DataFactory.namedNode(RDF.first), this._object, this._graph);
     // If the token was consumed, continue with the rest of the input
     if (completed.token === null)
       return this._getContextEndReader();
@@ -690,7 +683,7 @@ export class Parser {
   _readNamedGraphBlankLabel(token) {
     if (token.type !== ']')
       return this._error('Invalid graph label', token);
-    this._subject = this._blankNode();
+    this._subject = this.dataFactory.blankNode();
     return this._readGraph;
   }
 
@@ -720,19 +713,19 @@ export class Parser {
     }
     // Without explicit quantifiers, map entities to a quantified entity
     if (!this._explicitQuantifiers)
-      this._quantified[entity.id] = this._quantifier(this._blankNode().value);
+      this._quantified[entity.id] = this._quantifier(this.dataFactory.blankNode().value);
     // With explicit quantifiers, output the reified quantifier
     else {
       // If this is the first item, start a new quantifier list
       if (this._subject === null)
         this._emit(this._graph || DataFactory.defaultGraph(), this._predicate,
-                   this._subject = this._blankNode(), this.QUANTIFIERS_GRAPH);
+                   this._subject = this.dataFactory.blankNode(), DataFactory.namedNode('urn:n3:quantifiers'));
       // Otherwise, continue the previous list
       else
-        this._emit(this._subject, this.RDF_REST,
-                   this._subject = this._blankNode(), this.QUANTIFIERS_GRAPH);
+        this._emit(this._subject, DataFactory.namedNode(RDF.rest),
+                   this._subject = this.dataFactory.blankNode(), DataFactory.namedNode('urn:n3:quantifiers'));
       // Output the list item
-      this._emit(this._subject, this.RDF_FIRST, entity, this.QUANTIFIERS_GRAPH);
+      this._emit(this._subject, DataFactory.namedNode(RDF.first), entity, DataFactory.namedNode('urn:n3:quantifiers'));
     }
     return this._readQuantifierPunctuation;
   }
@@ -746,7 +739,7 @@ export class Parser {
     else {
       // With explicit quantifiers, close the quantifier list
       if (this._explicitQuantifiers) {
-        this._emit(this._subject, this.RDF_REST, this.RDF_NIL, this.QUANTIFIERS_GRAPH);
+        this._emit(this._subject, DataFactory.namedNode(RDF.rest), DataFactory.namedNode(RDF.nil), DataFactory.namedNode('urn:n3:quantifiers'));
         this._subject = null;
       }
       // Read a dot
@@ -778,7 +771,7 @@ export class Parser {
         // Switch back to the context of the list
         this._restoreContext();
         // Output the list item
-        this._emit(this._subject, this.RDF_FIRST, item, this._graph);
+        this._emit(this._subject, DataFactory.namedNode(RDF.first), item, this._graph);
       }
       return this._afterPath(token);
     }
@@ -787,7 +780,7 @@ export class Parser {
   // ### `_readForwardPath` reads a '!' path
   _readForwardPath(token) {
     let subject, predicate;
-    const object = this._blankNode();
+    const object = this.dataFactory.blankNode();
     // The next token is the predicate
     if ((predicate = this._readEntity(token)) === undefined)
       return;
@@ -804,7 +797,7 @@ export class Parser {
 
   // ### `_readBackwardPath` reads a '^' path
   _readBackwardPath(token) {
-    const subject = this._blankNode();
+    const subject = this.dataFactory.blankNode();
     let predicate, object;
     // The next token is the predicate
     if ((predicate = this._readEntity(token)) === undefined)
@@ -836,7 +829,7 @@ export class Parser {
     if (token.type !== '>>')
       return this._error(`Expected >> but got ${token.type}`, token);
     // Read the quad and restore the previous context
-    const quad = this._quad(this._subject, this._predicate, this._object,
+    const quad = DataFactory.quad(this._subject, this._predicate, this._object,
       this._graph || DataFactory.defaultGraph());
     this._restoreContext();
     // If the triple was the subject, continue by reading the predicate.
@@ -871,7 +864,7 @@ export class Parser {
 
   // ### `_emit` sends a quad through the callback
   _emit(subject, predicate, object, graph) {
-    this._callback(null, this._quad(subject, predicate, object, graph || DataFactory.defaultGraph()));
+    this._callback(null, DataFactory.quad(subject, predicate, object, graph || DataFactory.defaultGraph()));
   }
 
   // ### `_error` emits an error message through the callback
@@ -986,8 +979,7 @@ export class Parser {
     this._readCallback = this._readInTopContext;
     this._sparqlStyle = false;
     this._prefixes = Object.create(null);
-    this._prefixes._ = this._blankNodePrefix ? this._blankNodePrefix.substr(2)
-                                             : `b${blankNodePrefix++}_`;
+    this._prefixes._ = '_:';
     this._prefixCallback = prefixCallback || noop;
     this._inversePredicate = false;
     this._quantified = Object.create(null);
@@ -1017,26 +1009,3 @@ export class Parser {
 
 // The empty function
 function noop() {}
-
-// Initializes the parser with the given data factory
-function initDataFactory(parser, factory) {
-  parser._namedNode   = factory.namedNode;
-  parser._blankNode   = factory.blankNode;
-  parser._literal     = factory.literal;
-  parser._variable    = factory.variable;
-  parser._quad        = factory.quad;
-
-  // Set common named nodes
-  parser.RDF_FIRST  = factory.namedNode(RDF.first);
-  parser.RDF_REST   = factory.namedNode(RDF.rest);
-  parser.RDF_NIL    = factory.namedNode(RDF.nil);
-  parser.N3_FORALL  = factory.namedNode('http://www.w3.org/2000/10/swap/reify#forAll');
-  parser.N3_FORSOME = factory.namedNode('http://www.w3.org/2000/10/swap/reify#forSome');
-  parser.ABBREVIATIONS = {
-    'a': factory.namedNode(RDF.type),
-    '=': factory.namedNode(OWL.sameAs),
-    '>': factory.namedNode('http://www.w3.org/2000/10/swap/log#implies'),
-  };
-  parser.QUANTIFIERS_GRAPH = factory.namedNode('urn:n3:quantifiers');
-}
-initDataFactory(Parser.prototype, DataFactory);
